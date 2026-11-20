@@ -105,3 +105,37 @@ neighbouring points).
 of all 26,336 regions in `RIPPM_1000` and `RIPPM_200` from their counts:
 **100% match** (max relative difference 1e-14, the 15 digits diffReps prints).
 `tests/data/nb_reference.R` (R port, TOMS 708 via `pbeta`) agrees within 1.4e-11.
+
+## M5: sliding-window scan and region merging
+
+**Perl:** the per-chromosome loop in `diffReps.pl` (~394-480), `isAboveCutoff`,
+`isWithinGap`, `init`/`expand` (`ChromaModSite.pm`) and the `WindowCoverage`
+class at the end of `diffReps.pl`. Scanning uses bins of size **step**; window
+`w` covers `[w*step+1, w*step+window]`.
+
+- A window is tested if **all** treatment replicates, or **all** control
+  replicates, have a nonzero raw count `> mean + nsd*dev`.
+- A significant window (`p < --pval`) extends the open region if it starts
+  within `--gap` bp of the region's end **and** has the same direction as the
+  region's first window; otherwise the open region is closed and a new one starts.
+- A region made of one window keeps the window's statistics; a longer one
+  is re-tested on its summed counts (its Event can differ from its windows').
+- The best window is the one with the lowest p (the first one on ties).
+- Window coverage counts the bp of passing windows once even though windows
+  overlap. It gives the BH `N = floor(coverage / window)`.
+
+**Rust:** `src/scan.rs`: one function per chromosome, run in parallel with
+rayon. The open region is an `Option<Open>`; Perl's "pval undefined → needs
+re-test" flag becomes `stat: Option<...>`.
+
+**Checked:** `tests/parity_scan.rs` scans all four runs (background from the
+report header; norm from `norm.txt` or recomputed). Window coverage, the number
+of regions and every region's coordinates, normalized counts, Event, log2FC,
+p-value, best window and window p-value match diffReps exactly:
+
+| Run | Coverage | Regions |
+|---|---|---|
+| RIPPM_1000 | 222,074,700 | 6,622 |
+| RIPPM_200 | 175,240,480 | 19,714 |
+| DIFFREPS_1000 | 221,172,000 | 4,543 |
+| DIFFREPS_200 | 175,240,480 | 13,922 |

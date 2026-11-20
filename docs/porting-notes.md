@@ -177,3 +177,25 @@ cause is the system libm on the machine that ran diffReps: DCDFLIB calls
 `exp`/`log`/`pow`, and glibc picks different implementations (e.g. FMA
 variants) by version and CPU, which can round differently in rare cases. The
 walk then amplifies one ulp into a few. It changes nothing in practice.
+
+## M7: performance
+
+Parallelism is in place since M2/M5: BED files are read in parallel, and
+chromosomes are scanned in parallel (rayon, `--nproc` threads). Memory stays
+low because reads are kept as one `u32` each and bins are built one
+chromosome at a time (prefix sums, no window-count vectors).
+
+Same data (5 vs 3 ATAC samples, 145 M fragments, mm10), default settings
+(diffReps computes the background and norm factors itself):
+
+| | diffReps 1.55.6 (16 cores) | diffreps-rs (4 threads, laptop) |
+|---|---|---|
+| window 1000: read / statistics / scan | 79 s / 192 s / 219 s | 7 s / <1 s / ~35 s |
+| window 200: read / statistics / scan | 93 s / 309 s / 421 s | 6 s / ~3 s / 56 s |
+| window 200: total, peak memory | ~14 min | 65 s, 1.8 GB |
+
+The scan is dominated by the NB test: about 8.8 million windows are tested
+with the 200 bp window, and the exact test walks over all splits of the total
+count, evaluating two incomplete beta functions per step. Making this faster
+would mean changing the algorithm (e.g. the step rule), which would change
+the p-values, so it is left as is.

@@ -68,11 +68,6 @@ fn main() -> Result<()> {
             background::estimate_background(&samples, &chroms, cfg.window, method)
         }
     };
-    report::spit(
-        &mut out,
-        &format!("# Estimate mean and deviation for read counts done in {} seconds", t.elapsed().as_secs()),
-        &[],
-    )?;
     let norm: Vec<f64> = match user_norm {
         Some((tr, co)) => [tr, co].concat(),
         None => {
@@ -80,6 +75,12 @@ fn main() -> Result<()> {
             background::estimate_norm(&samples, &chroms, cfg.window, &bg, nsd)?
         }
     };
+    // As in diffReps, this time includes the normalization factors.
+    report::spit(
+        &mut out,
+        &format!("# Estimate mean and deviation for read counts done in {} seconds", t.elapsed().as_secs()),
+        &[],
+    )?;
     report::write_estimates(&mut out, cfg.window, n_tr, &bg, &norm)?;
     out.flush()?;
 

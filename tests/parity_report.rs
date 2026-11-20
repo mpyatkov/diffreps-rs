@@ -1,19 +1,23 @@
-//! M5 parity: the full scan (cutoff, window tests, region merging, coverage)
+//! M5/M6 parity: the full pipeline after background estimation (cutoff,
+//! window tests, region merging, coverage, Benjamini-Hochberg, row format)
 //! against all four reference runs. The background (mean/deviation) is taken
 //! from each report's header, which removes diffReps' random sampling.
+//!
+//! Every column must be string-identical, except the four p-value columns,
+//! which must agree within a relative 1e-13: about 0.3% of diffReps' p-values
+//! differ from ours in the last printed digits (see docs/porting-notes.md, M6).
 
 mod common;
 
 use common::*;
 use diffreps::background::{Background, estimate_norm};
 use diffreps::inputs;
-use diffreps::report::fmt_f2;
+use diffreps::padj::padj_bh;
+use diffreps::report::write_region;
 use diffreps::scan::{ScanParams, scan_chrom};
 use rayon::prelude::*;
 
-fn close(a: f64, b: f64) -> bool {
-    (a - b).abs() <= 1e-12 * b.abs()
-}
+const P_COLS: [usize; 4] = [12, 13, 17, 18]; // pval, padj, winP, winQ
 
 fn check(run: &str) {
     let r = Report::load(run);
@@ -47,53 +51,63 @@ fn check(run: &str) {
     );
     assert_eq!(cov as f64, r.number("Genome coverage for windows that passed cutoff"));
     assert_eq!(regions.len(), r.rows.len());
-    let mut mismatches = 0;
-    for (g, row) in regions.iter().zip(&r.rows) {
-        let ours_counts: Vec<String> = g.norm_counts.iter().map(|v| format!("{v:.2}")).collect();
-        let theirs_counts: Vec<String> = row.tr_cnt.iter().chain(&row.co_cnt).map(|v| format!("{v:.2}")).collect();
-        let ok = chroms[g.chrom].name == row.chrom
-            && g.start == row.start
-            && g.end == row.end
-            && ours_counts == theirs_counts
-            && g.stat.event.as_str() == row.event
-            && fmt_f2(g.stat.log2fc) == row.log2fc
-            && close(g.stat.pval, row.pval)
-            && g.win_sta == row.win_sta
-            && g.win_sta + window - 1 == row.win_end
-            && fmt_f2(g.win_stat.log2fc) == row.win_fc
-            && close(g.win_stat.pval, row.win_p);
+    let n = (cov / window) as f64;
+    let padj = padj_bh(&regions.iter().map(|g| g.stat.pval).collect::<Vec<_>>(), n);
+    let winq = padj_bh(&regions.iter().map(|g| g.win_stat.pval).collect::<Vec<_>>(), n);
+    let (mut mismatches, mut exact_p, mut worst) = (0, 0, 0f64);
+    for (k, (g, row)) in regions.iter().zip(&r.rows).enumerate() {
+        let mut buf = Vec::new();
+        write_region(&mut buf, &chroms[g.chrom].name, g, *n_tr, window, padj[k], winq[k]).unwrap();
+        let ours = String::from_utf8(buf).unwrap();
+        let ours: Vec<&str> = ours.trim_end().split('\t').collect();
+        let theirs: Vec<&str> = row.line.split('\t').collect();
+        let mut ok = ours.len() == theirs.len();
+        for (c, (a, b)) in ours.iter().zip(&theirs).enumerate() {
+            if P_COLS.contains(&c) {
+                let (x, y): (f64, f64) = (a.parse().unwrap(), b.parse().unwrap());
+                let rel = (x - y).abs() / y;
+                worst = worst.max(rel);
+                if a == b { exact_p += 1 }
+                ok &= rel <= 1e-13;
+            } else {
+                ok &= a == b;
+            }
+        }
         if !ok {
             mismatches += 1;
             if mismatches <= 5 {
-                eprintln!("  diffReps: {}\n  ours:     {} {} {} {:?} {} {:e} win {} {:e}", row.line,
-                    chroms[g.chrom].name, g.start, g.end, ours_counts, g.stat.event.as_str(), g.stat.pval,
-                    g.win_sta, g.win_stat.pval);
+                eprintln!("  diffReps: {}\n  ours:     {}", row.line, ours.join("\t"));
             }
         }
     }
+    eprintln!(
+        "{run}: {} of {} p-value fields identical as printed, worst relative difference {worst:.1e}",
+        exact_p,
+        4 * regions.len()
+    );
     assert_eq!(mismatches, 0, "{run}: {mismatches} regions differ");
 }
 
 #[test]
 #[ignore = "needs the TEST data (~4 GB)"]
-fn scan_rippm_1000() {
+fn report_rippm_1000() {
     check("RIPPM_1000");
 }
 
 #[test]
 #[ignore = "needs the TEST data (~4 GB)"]
-fn scan_rippm_200() {
+fn report_rippm_200() {
     check("RIPPM_200");
 }
 
 #[test]
 #[ignore = "needs the TEST data (~4 GB)"]
-fn scan_diffreps_1000() {
+fn report_diffreps_1000() {
     check("DIFFREPS_1000");
 }
 
 #[test]
 #[ignore = "needs the TEST data (~4 GB)"]
-fn scan_diffreps_200() {
+fn report_diffreps_200() {
     check("DIFFREPS_200");
 }

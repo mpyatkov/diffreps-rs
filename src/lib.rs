@@ -9,6 +9,7 @@ pub mod cdflib;
 pub mod cli;
 pub mod inputs;
 pub mod nbtest;
+pub mod padj;
 pub mod report;
 pub mod scan;
 pub mod stats;

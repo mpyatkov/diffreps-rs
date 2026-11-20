@@ -139,3 +139,41 @@ p-value, best window and window p-value match diffReps exactly:
 | RIPPM_200 | 175,240,480 | 19,714 |
 | DIFFREPS_1000 | 221,172,000 | 4,543 |
 | DIFFREPS_200 | 175,240,480 | 13,922 |
+
+## M6: Benjamini-Hochberg and the report table
+
+**Perl:** `adjPval` (`ChromaModSite.pm:671`) calls `padjBH` (`Common.pm:47`)
+twice, for region p-values and best-window p-values, with
+`N = floor(window coverage / window)`. `print_reg` (`ChromaModSite.pm:114`)
+writes the 19 columns: counts, means and fold changes with `%.2f`, p-values
+with Perl's default number format (`%.15g`), `NA` for the enrichment columns
+(no background samples), and `winEnd = winSta + window - 1`.
+
+`padjBH` is the usual step-up BH except for one quirk, kept for parity: if
+the smallest p-value also has the smallest `p*N/rank`, it is overwritten by
+the next copy-down (standard BH would keep it). See `src/padj.rs`.
+
+**Rust:** `src/padj.rs`, `report::fmt_g15` (Rust has no `%g`), `report::write_region`,
+and the full pipeline in `src/main.rs`.
+
+**Checked:** `tests/parity_report.rs` (formerly `parity_scan.rs`) formats
+every row and compares it with diffReps column by column. All non-p-value
+columns are identical in all four runs. Of the four p-value columns
+(pval, padj, winP, winQ), 99.7% of fields are identical as printed and the
+rest differ only in the last digits (worst relative difference 4.4e-14):
+
+| Run | p-value fields identical | Worst rel. difference |
+|---|---|---|
+| RIPPM_1000 | 26,430 / 26,488 | 8.7e-15 |
+| RIPPM_200 | 78,783 / 78,856 | 1.0e-14 |
+| DIFFREPS_1000 | 18,113 / 18,172 | 4.4e-14 |
+| DIFFREPS_200 | 55,563 / 55,688 | 1.1e-14 |
+
+**Where the last-digit differences come from (not resolved):** not the
+DCDFLIB port (bit-identical to the C, and Math::CDF's copy differs from
+netlib's only by explicit `(long)` casts), not Perl's literal or `norm.txt`
+parsing (checked), and the same with diffReps' own computed norm. The likely
+cause is the system libm on the machine that ran diffReps: DCDFLIB calls
+`exp`/`log`/`pow`, and glibc picks different implementations (e.g. FMA
+variants) by version and CPU, which can round differently in rare cases. The
+walk then amplifies one ulp into a few. It changes nothing in practice.

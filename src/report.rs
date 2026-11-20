@@ -7,6 +7,7 @@ use std::io::Write;
 
 use anyhow::Result;
 
+use crate::background::Background;
 use crate::cli::Config;
 
 pub const DIFFREPS_VERSION: &str = "1.55.6";
@@ -50,5 +51,38 @@ pub fn write_parameters<W: Write>(out: &mut W, cfg: &Config) -> Result<()> {
     spit(out, "# Fragment size", &one(cfg.fragsize))?;
     spit(out, "# Number of processors used", &one(cfg.nproc))?;
     spit(out, "# Full command used", &one(&cfg.full_command))?;
+    Ok(())
+}
+
+/// Perl `fprecision(2, @values)`: `sprintf "%.2f"` each value.
+pub fn f2(values: &[f64]) -> Vec<String> {
+    values.iter().map(|v| fmt_f2(*v)).collect()
+}
+
+/// `sprintf "%.2f"` as Perl prints it, including `Inf`/`-Inf`.
+pub fn fmt_f2(v: f64) -> String {
+    if v.is_infinite() {
+        if v > 0.0 { "Inf".into() } else { "-Inf".into() }
+    } else {
+        format!("{v:.2}")
+    }
+}
+
+/// The "Important values estimated from data" block.
+pub fn write_estimates<W: Write>(
+    out: &mut W,
+    window: u64,
+    n_tr: usize,
+    bg: &Background,
+    norm: &[f64],
+) -> Result<()> {
+    spit(out, "## Important values estimated from data ##", &[])?;
+    spit(out, "# Read count statistics based on bin size", &one(window))?;
+    spit(out, "# Treatment count mean", &f2(&bg.mean[..n_tr]))?;
+    spit(out, "# Control count mean", &f2(&bg.mean[n_tr..]))?;
+    spit(out, "# Treatment count deviation", &f2(&bg.dev[..n_tr]))?;
+    spit(out, "# Control count deviation", &f2(&bg.dev[n_tr..]))?;
+    spit(out, "# Treatment normalization constant", &f2(&norm[..n_tr]))?;
+    spit(out, "# Control normalization constant", &f2(&norm[n_tr..]))?;
     Ok(())
 }

@@ -3,7 +3,9 @@
 //!
 //! See `docs/porting-notes.md` for how each module maps to the Perl code.
 
+pub mod background;
 pub mod bed;
 pub mod cli;
 pub mod inputs;
 pub mod report;
+pub mod stats;

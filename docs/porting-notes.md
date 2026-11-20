@@ -45,3 +45,29 @@ replaces both the temporary files and Perl's separate window-count vectors.
 regions in `RIPPM_1000` and `RIPPM_200` (`round(printed * norm)`) and gets
 exact agreement for every sample. Reading all eight files takes ~7.5 s and
 600 MB (diffReps: 80 s for its split step).
+
+## M3: background level and normalization factors
+
+**Perl:** `mean_std_norm` (`diffReps.pl:594`). All of it uses bins of size
+**window**, not step. Robust mode (the default) keeps each bin with probability
+`100000 / total_bins` using unseeded `rand()`, then takes a right-trimmed mean
+(`mean_r`, `alpha` = 0.05) and the MAD around it (×1.4826). `--std` uses the
+plain mean and population SD over all bins. Normalization factors are a
+median of ratios: over bins where every sample has `count >= mean + nsd*dev`
+and all counts > 0, take `count / geomean(bin)`, and use the median per sample.
+A factor is a **divisor** (`normalized = raw / factor`).
+
+**Rust:** `src/background.rs`, `src/stats.rs` (`mean_r`, `mad`, `median`,
+`geomean`, `var` with the same definitions). The sampling uses a seeded
+SplitMix64, so runs are reproducible; `--sample-size 0` uses every bin.
+`--bg-from-report` reads the mean and deviation from a diffReps report header,
+which removes the randomness for parity tests. With `--norm`, the factors are
+not estimated at all (diffReps estimates them and then ignores them).
+
+**Note:** the cutoff here is `count < cutoff → skip` (so `>=` passes), while
+the window scan uses `count <= cutoff → fail` (so `>` passes). Both are kept.
+
+**Checked:** `tests/parity_background.rs`. With diffReps' header mean and
+deviation, our factors print identically for `DIFFREPS_1000` (4.27 0.29 0.52
+2.32 1.73 / 1.18 0.50 0.69) and `DIFFREPS_200`. Our sampled estimates are
+within diffReps' own run-to-run noise.

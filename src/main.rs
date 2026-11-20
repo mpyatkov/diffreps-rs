@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 use diffreps::cli::Args;
+use diffreps::background::{self, Method};
 use diffreps::{bed, inputs, report};
 use rayon::prelude::*;
 use std::time::Instant;
@@ -26,8 +27,6 @@ fn main() -> Result<()> {
     report::write_parameters(&mut out, &cfg)?;
     out.flush()?;
 
-    let _ = user_norm;
-
     // Step 1: read all BED files (one rayon task per file).
     rayon::ThreadPoolBuilder::new().num_threads(cfg.nproc).build_global()?;
     let t = Instant::now();
@@ -43,6 +42,35 @@ fn main() -> Result<()> {
         );
     }
     report::spit(&mut out, &format!("# Split BED files done in {} seconds.", t.elapsed().as_secs()), &[])?;
+    out.flush()?;
+
+    // Step 2: background level (mean, deviation) and normalization factors.
+    let t = Instant::now();
+    let (n_tr, n_co) = (cfg.treatment.len(), cfg.control.len());
+    let bg = match &cfg.bg_from_report {
+        Some(p) => background::background_from_report(p, n_tr, n_co, cfg.window)?,
+        None => {
+            let method = if cfg.robust {
+                Method::Robust { alpha: cfg.alpha, sample_size: cfg.sample_size, seed: cfg.seed }
+            } else {
+                Method::Classic
+            };
+            background::estimate_background(&samples, &chroms, cfg.window, method)
+        }
+    };
+    report::spit(
+        &mut out,
+        &format!("# Estimate mean and deviation for read counts done in {} seconds", t.elapsed().as_secs()),
+        &[],
+    )?;
+    let norm: Vec<f64> = match user_norm {
+        Some((tr, co)) => [tr, co].concat(),
+        None => {
+            let nsd = cfg.nrpass.then_some(cfg.nsd);
+            background::estimate_norm(&samples, &chroms, cfg.window, &bg, nsd)?
+        }
+    };
+    report::write_estimates(&mut out, cfg.window, n_tr, &bg, &norm)?;
     out.flush()?;
     Ok(())
 }

@@ -71,3 +71,37 @@ the window scan uses `count <= cutoff → fail` (so `>` passes). Both are kept.
 deviation, our factors print identically for `DIFFREPS_1000` (4.27 0.29 0.52
 2.32 1.73 / 1.18 0.50 0.69) and `DIFFREPS_200`. Our sampled estimates are
 within diffReps' own run-to-run noise.
+
+## M4: the exact negative binomial test
+
+**Perl:** `NBTest.pm` (the exact test of DESeq 2010, adapted) and `calc_stat`
+(`ChromaModSite.pm:518`). Group sums of raw counts get NB means and variances
+from `raw_sum_mean`/`raw_sum_var` (pooled normalized mean; replicate variance
+minus the Poisson part, floored at `1e-8*mean`). The p-value sums
+`P(a)P(kS-a)` over all splits at most as likely as the observed one, walking
+in from both ends toward `kexp`. Two details make this hard to reproduce:
+
+1. `kexp = kS*m_A/(m_A+m_B)` is **not rounded**, so `pnbinom` is called at
+   fractional counts. Math::CDF passes them straight to DCDFLIB, which
+   computes `I_p(r, x+1)`, a smooth function of `x`.
+2. Every probability is `pnbinom(x) - pnbinom(x-1) + 1e-8`, and the walk's
+   step grows when neighbouring values differ by less than a relative 1e-8.
+   In flat tails that decision depends on the **rounding noise** of the
+   difference of two CDF values near 1.
+
+**What we tried first:** an exact pmf (Loader's saddle-point method, as in R's
+`dbinom_raw`). It is more accurate, but only ~85% of diffReps' p-values were
+reproduced, some off by 1000×. An R port using `pbeta` (TOMS 708, like DCDFLIB)
+reproduced 99.7%.
+
+**Rust:** `src/cdflib.rs` is a line-by-line port of DCDFLIB's `cumbet → bratio`
+(TOMS 708) and `cdfnbn` (which=1). It is **bit-identical** to the C on
+230,000 random inputs (see `tools/dcdflib-check/`). `src/nbtest.rs` ports
+`nb_r_p`, `dnbinom`, `nb_join_pval`, `nb_pval` and `calc_stat` literally,
+with a 4-entry cache of CDF values (the walk asks for `F(x)` and `F(x-1)` of
+neighbouring points).
+
+**Checked:** `tests/parity_nbtest.rs` recomputes the p-value, log2FC and Event
+of all 26,336 regions in `RIPPM_1000` and `RIPPM_200` from their counts:
+**100% match** (max relative difference 1e-14, the 15 digits diffReps prints).
+`tests/data/nb_reference.R` (R port, TOMS 708 via `pbeta`) agrees within 1.4e-11.

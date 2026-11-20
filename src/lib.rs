@@ -5,7 +5,9 @@
 
 pub mod background;
 pub mod bed;
+pub mod cdflib;
 pub mod cli;
 pub mod inputs;
+pub mod nbtest;
 pub mod report;
 pub mod stats;

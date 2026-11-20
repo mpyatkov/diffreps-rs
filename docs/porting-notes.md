@@ -23,3 +23,25 @@ prefix matching, so `--frag` still means `--fragsize`), `src/inputs.rs`.
 - New: `--seed`, `--sample-size` (reproducible background estimate) and
   `--bg-from-report` (developer option for comparing with a diffReps report).
 - Duplicate chromosomes in `--chrlen` are an error (Perl would process them twice).
+
+## M2: reading BED files and binning
+
+**Perl:** `sep_chrom_bed` (`MyShortRead.pm:259`) writes one temporary file per
+chromosome per sample. `bin_genome_count` (`MyShortRead.pm:142`) reduces each
+read to one point, `start + frag/2` on the `+` strand and `end - frag/2`
+otherwise. **A `.` strand counts as minus**, so with `--frag 0` an ATAC fragment
+is counted at its end coordinate. Points go into `ceil(len/bin)` bins; points
+past the last bin are ignored. Window counts are running sums of
+`window/step` consecutive bins (`create_window_count`, `ChromBed.pm:123`), and
+region counts sum the bins inside the region (`get_region_count`, `SRBed.pm:240`).
+
+**Rust:** `src/bed.rs`. Each file is read once (one rayon task per file) and
+each read is stored as `2*loc` in a `u32` (doubling keeps odd fragment sizes
+exact). `BinCounts` builds bins of any size for one chromosome on demand and
+keeps **prefix sums**, so a window or region count is one subtraction. This
+replaces both the temporary files and Perl's separate window-count vectors.
+
+**Checked:** `tests/parity_bins.rs` recomputes the raw counts of all 26,338
+regions in `RIPPM_1000` and `RIPPM_200` (`round(printed * norm)`) and gets
+exact agreement for every sample. Reading all eight files takes ~7.5 s and
+600 MB (diffReps: 80 s for its split step).

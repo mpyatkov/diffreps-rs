@@ -1,6 +1,3 @@
-mod cli;
-mod inputs;
-mod report;
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -8,7 +5,10 @@ use std::io::{BufWriter, Write};
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use cli::Args;
+use diffreps::cli::Args;
+use diffreps::{bed, inputs, report};
+use rayon::prelude::*;
+use std::time::Instant;
 
 fn main() -> Result<()> {
     let full_command = std::env::args().collect::<Vec<_>>().join(" ");
@@ -26,12 +26,23 @@ fn main() -> Result<()> {
     report::write_parameters(&mut out, &cfg)?;
     out.flush()?;
 
-    eprintln!(
-        "{} chromosomes, window {} / step {}, user norm: {}",
-        chroms.len(),
-        cfg.window,
-        cfg.step,
-        user_norm.is_some()
-    );
+    let _ = user_norm;
+
+    // Step 1: read all BED files (one rayon task per file).
+    rayon::ThreadPoolBuilder::new().num_threads(cfg.nproc).build_global()?;
+    let t = Instant::now();
+    let files: Vec<_> = cfg.treatment.iter().chain(&cfg.control).collect();
+    let samples = files
+        .par_iter()
+        .map(|p| bed::read_sample(p, &chroms, cfg.fragsize))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    for s in &samples {
+        eprintln!(
+            "{}: {} reads ({} unknown chromosome, {} malformed, {} negative position)",
+            s.path.display(), s.nread, s.unknown_chrom, s.malformed, s.negative
+        );
+    }
+    report::spit(&mut out, &format!("# Split BED files done in {} seconds.", t.elapsed().as_secs()), &[])?;
+    out.flush()?;
     Ok(())
 }

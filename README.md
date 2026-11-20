@@ -18,6 +18,23 @@ cargo build --release          # binary: target/release/diffreps
 
 No runtime dependencies. Needs Rust 1.88 or newer.
 
+### Static binary for servers with an old glibc
+
+A normal build links against the build machine's glibc and fails on older
+systems (`version GLIBC_2.29 not found`). Build a fully static binary with
+musl instead (rustup ships musl; no system packages needed):
+
+```bash
+rustup target add x86_64-unknown-linux-musl
+cargo build --release --target x86_64-unknown-linux-musl
+# binary: target/x86_64-unknown-linux-musl/release/diffreps (runs on any x86-64 Linux)
+```
+
+musl has its own `exp`/`log`/`pow`, which can round differently from glibc in
+the last bit. The parity tests pass unchanged with the musl build (identical
+regions; 99.7% of p-values identical as printed, the rest within 4.4e-14,
+the same as with glibc).
+
 ## Usage
 
 Same option names as `diffReps.pl`, so existing commands work with the

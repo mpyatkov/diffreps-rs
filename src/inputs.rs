@@ -119,6 +119,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)] // 3.14 is a normalization factor from the test data
     fn norm_file_like_test_data() {
         let (t, c) = parse_norm("treatment 3.14 0.19 0.34 1.64 1.15\ncontrol 0.75 0.33 0.45\n", 5, 3).unwrap();
         assert_eq!(t, [3.14, 0.19, 0.34, 1.64, 1.15]);

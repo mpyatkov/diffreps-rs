@@ -18,6 +18,20 @@
 //! structured control flow. C `int` conversions truncate, as `as i32` does.
 //! Function names are the C names.
 
+// This is a literal port, kept close to the C on purpose: DCDFLIB's truncated
+// constants (e.g. 1.12837916709551 instead of FRAC_2_SQRT_PI) and its exact
+// operation order determine the output bits, so clippy's rewrites must not
+// be applied here.
+#![allow(
+    clippy::approx_constant,
+    clippy::excessive_precision,
+    clippy::neg_cmp_op_on_partial_ord,
+    clippy::assign_op_pattern,
+    clippy::needless_range_loop,
+    clippy::too_many_arguments,
+    clippy::manual_range_contains
+)]
+
 /// `spmpar(1)`: machine epsilon `2^(1-53)`.
 const EPS_MACH: f64 = f64::EPSILON;
 

@@ -199,3 +199,14 @@ with the 200 bp window, and the exact test walks over all splits of the total
 count, evaluating two incomplete beta functions per step. Making this faster
 would mean changing the algorithm (e.g. the step rule), which would change
 the p-values, so it is left as is.
+
+## M8: comparison tool, README
+
+`tools/compare_reports.py` (Python standard library only) compares two
+reports: header values (timings, paths and versions ignored), regions present
+in only one report, and per-column differences for shared regions, with a
+relative tolerance for the p-value columns (`--ptol`, default 1e-13).
+
+On the full default 200 bp run (our own seeded background sample, no
+`--bg-from-report`), it reports identical regions and identical columns; only
+the sampled mean/deviation in the header differ in the second decimal.

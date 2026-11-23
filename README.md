@@ -10,6 +10,16 @@ ported. Annotation (`region_analysis.pl`), hotspots (`findHotspots.pl`),
 background samples (`--btr/--bco/--bkg`) and the T-test, G-test and
 chi-square test are not.
 
+## Download
+
+Static Linux binaries (x86-64, no dependencies, any glibc version) are
+attached to each [GitHub release](https://github.com/mpyatkov/diffreps-rs/releases):
+
+```bash
+tar xzf diffreps-vX.Y.Z-x86_64-unknown-linux-musl.tar.gz
+./diffreps-vX.Y.Z-x86_64-unknown-linux-musl/diffreps --help
+```
+
 ## Build
 
 ```bash
@@ -31,9 +41,8 @@ cargo build --release --target x86_64-unknown-linux-musl
 ```
 
 musl has its own `exp`/`log`/`pow`, which can round differently from glibc in
-the last bit. The parity tests pass unchanged with the musl build (identical
-regions; 99.7% of p-values identical as printed, the rest within 4.4e-14,
-the same as with glibc).
+the last bit. In our comparisons with diffReps this made no difference
+(identical regions; p-values agree to the same precision as with glibc).
 
 ## Usage
 
@@ -99,15 +108,20 @@ Speed on the same data: a 200 bp run takes ~1 minute on 4 threads (diffReps:
 - With `--norm`, normalization factors are not estimated (diffReps estimated and then ignored them).
 - Warnings about skipped BED lines are summarized per file instead of one per line.
 
-## Tests
+## Tests and releases
 
 ```bash
-cargo test                                  # unit tests (no data needed)
-DIFFREPS_TEST_DIR=/path/to/TEST \
-  cargo test --release -- --ignored         # parity with the reference runs (~4 GB data, a few minutes)
+cargo test            # unit tests, no data needed
 ```
 
-The `TEST` directory layout is described in `tests/common/mod.rs`.
+GitHub Actions runs clippy and the unit tests (glibc and musl) on every push
+and pull request (`.github/workflows/ci.yml`). Pushing a tag `vX.Y.Z` that
+matches `version` in `Cargo.toml` builds the static musl binary and publishes
+it as a release (`.github/workflows/release.yml`):
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
 
 ## For readers
 

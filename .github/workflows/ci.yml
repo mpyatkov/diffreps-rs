@@ -1,0 +1,37 @@
+# Lint and unit tests on every push and pull request.
+# The parity tests against diffReps reference runs are #[ignore]d (they need
+# several GB of data), so `cargo test` runs only the self-contained tests.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          # the target used for releases: also test with musl's libm
+          - x86_64-unknown-linux-musl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Clippy
+        run: cargo clippy --release --all-targets --target ${{ matrix.target }} -- -D warnings
+      - name: Unit tests
+        run: cargo test --release --target ${{ matrix.target }}
